@@ -3,137 +3,517 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notulen Rapat Sosialisasi SPMB 2026</title>
+    <title>Rakit Kubus 3D - Drag & Drop Tool</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
             margin: 0;
-            padding: 30px 20px;
-            background-color: #f0f7ff; /* Biru Pastel Sangat Muda */
-            color: #1a2a3a;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #1a1a1a;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            user-select: none;
+            cursor: grab;
         }
-        .container {
-            max-width: 750px;
-            margin: 0 auto;
-            background: #ffffff;
-            padding: 35px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(173, 216, 230, 0.3);
-            border: 1px solid #e1f0ff;
+        body.dragging-tool { cursor: copy; }
+        body.dragging-tool * { cursor: copy !important; }
+
+        #info {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #cccccc;
+            font-size: 13px;
+            text-align: center;
+            pointer-events: none;
         }
-        h1 {
-            color: #004488; /* Biru Tua */
-            border-bottom: 3px solid #3399ff; /* Biru Muda */
-            padding-bottom: 12px;
-            margin-top: 0;
-            font-size: 26px;
-            font-weight: 700;
-        }
-        h2 {
-            color: #0055aa; /* Biru */
-            margin-top: 25px;
-            font-size: 20px;
-            border-left: 4px solid #3399ff;
-            padding-left: 10px;
-        }
-        h3 {
-            color: #0066cc;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        .meta-info {
-            background-color: #e6f2ff; /* Biru Pastel */
-            border-left: 4px solid #0077ff; /* Biru */
-            padding: 15px 20px;
-            margin-bottom: 25px;
-            border-radius: 4px;
-        }
-        .meta-info p {
-            margin: 6px 0;
-            font-size: 15px;
-        }
-        ul {
-            padding-left: 20px;
-            margin-top: 5px;
-        }
-        li {
-            margin-bottom: 10px;
-            font-size: 15px;
-        }
-        li ul {
-            margin-top: 5px;
-        }
-        .badge {
-            background-color: #3399ff; /* Biru Muda */
+
+        /* ---------- Panel Tool ---------- */
+        #toolbox {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(35, 35, 35, 0.94);
+            padding: 14px;
+            border-radius: 10px;
             color: white;
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.85em;
-            display: inline-block;
-            margin-left: 5px;
+            border: 1px solid #444;
+            width: 220px;
+            z-index: 20;
+            cursor: default;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
-        .highlight-box {
-            background-color: #f4f9ff; /* Biru Pastel Lembut */
-            border: 1px solid #b3d7ff;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 8px;
-        }
-        .highlight-box p {
+        #toolbox h3 {
             margin: 0 0 10px 0;
-            color: #004488;
-            font-weight: 600;
+            font-size: 14px;
+            text-align: center;
+            color: #33b9ff;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
         }
-        .bold-blue {
-            color: #0055aa;
-            font-weight: 600;
+        #toolbox p.hint {
+            font-size: 11px;
+            color: #999;
+            margin: 0 0 10px 0;
+            text-align: center;
+            line-height: 1.4;
         }
+        .tool-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .tool-cube {
+            aspect-ratio: 1 / 1;
+            border-radius: 6px;
+            border: 2px solid rgba(255,255,255,0.25);
+            cursor: grab;
+            position: relative;
+            transition: transform 0.15s, border-color 0.15s;
+            box-shadow: inset 0 -4px 0 rgba(0,0,0,0.25), inset 0 4px 0 rgba(255,255,255,0.15);
+        }
+        .tool-cube:hover {
+            transform: scale(1.1);
+            border-color: #33b9ff;
+        }
+        .tool-cube:active { cursor: grabbing; }
+
+        /* Ghost kubus yang mengikuti kursor saat drag */
+        #dragGhost {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            opacity: 0.85;
+            border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6), inset 0 -4px 0 rgba(0,0,0,0.25);
+            transform: translate(-50%, -50%);
+        }
+
+        /* Highlight sisi kubus yang di-hover saat drag */
+        .face.drop-hover {
+            outline: 3px solid #f1c40f;
+            outline-offset: -3px;
+            box-shadow: inset 0 0 20px rgba(241,196,15,0.8);
+            filter: brightness(1.4);
+        }
+
+        /* Panel statistik & tombol */
+        .stats {
+            margin-top: 8px;
+            font-size: 13px;
+            text-align: center;
+            background: #222;
+            padding: 6px;
+            border-radius: 5px;
+            border: 1px solid #333;
+        }
+        .btn-action {
+            width: 100%;
+            margin-top: 6px;
+            padding: 7px;
+            border-radius: 5px;
+            border: none;
+            font-size: 13px;
+            cursor: pointer;
+            background: #444;
+            color: white;
+        }
+        .btn-action:hover { background: #555; }
+        .btn-reset { background: #c0392b; }
+        .btn-reset:hover { background: #e74c3c; }
+
+        /* Wadah 3D */
+        .scene {
+            width: 80px;
+            height: 80px;
+            perspective: 1000px;
+        }
+        .world {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(-25deg) rotateY(35deg);
+        }
+        .cube {
+            width: 80px;
+            height: 80px;
+            position: absolute;
+            transform-style: preserve-3d;
+        }
+        .face {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border: 1.5px solid rgba(255, 255, 255, 0.85);
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255,255,255,0.9);
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+            letter-spacing: 0.5px;
+            transition: filter 0.12s, box-shadow 0.12s;
+        }
+        .front  { transform: rotateY(  0deg) translateZ(40px); }
+        .back   { transform: rotateY(180deg) translateZ(40px); }
+        .right  { transform: rotateY( 90deg) translateZ(40px); }
+        .left   { transform: rotateY(-90deg) translateZ(40px); }
+        .top    { transform: rotateX( 90deg) translateZ(40px); }
+        .bottom { transform: rotateX(-90deg) translateZ(40px); }
     </style>
 </head>
 <body>
+    <div id="info">Geser layar untuk memutar • Scroll untuk zoom • Tarik kubus dari panel ke sisi kubus target</div>
 
-<div class="container">
-    <h1>Rapat Sosialisasi SPMB 2026</h1>
-    
-    <div class="meta-info">
-        <p><strong>Tempat:</strong> Gedung Kesenian Kabupaten Jombang</p>
-        <p><strong>Narasumber:</strong></p>
-        <ul>
-            <li>Bapak Rendra Kusuma</li>
-            <li>Bapak Iswahyudi</li>
-        </ul>
+    <div id="toolbox">
+        <h3>🧰 Tool Kubus</h3>
+        <p class="hint">Tarik salah satu kubus ke salah satu sisi kubus di scene</p>
+        <div class="tool-grid" id="toolGrid"></div>
+        <button class="btn-action" onclick="toggleAutoRotate()" id="btnRotate">Putar Otomatis: MATI</button>
+        <button class="btn-action" onclick="removeLastCube()">Hapus Kubus Terakhir</button>
+        <button class="btn-action btn-reset" onclick="resetWorld()">Reset ke 1 Kubus</button>
+        <div class="stats">
+            Total Kubus: <strong id="cubeCount">1</strong>
+        </div>
     </div>
 
-    <h2>Hasil Rapat</h2>
-    
-    <h3>1. Jalur SPMB SD (Penjelasan Bapak Rendra)</h3>
-    <ul>
-        <li><span class="bold-blue">Domisili</span> <span class="badge">80%</span>
-            <ul>
-                <li>Domisili murni: 60%</li>
-                <li>Domisili sebaran: 20%</li>
-            </ul>
-        </li>
-        <li><span class="bold-blue">Afirmasi</span> <span class="badge">15%</span></li>
-        <li><span class="bold-blue">Mutasi</span> <span class="badge">5%</span></li>
-    </ul>
-
-    <div class="highlight-box">
-        <p>Ketentuan Skor SPMB Tahun Ini (Berbeda):</p>
-        <ul>
-            <li><strong>60%</strong> berdasarkan jarak rumah</li>
-            <li><strong>40%</strong> berdasarkan usia</li>
-        </ul>
+    <div class="scene" id="scene">
+        <div class="world" id="world"></div>
     </div>
 
-    <h3>2. Tugas & Ketentuan Sistem</h3>
-    <ul>
-        <li><span class="bold-blue">Tugas OPS:</span> Memverifikasi data yang diunggah oleh orang tua siswa (berlaku untuk OPS TK maupun OPS SD itu sendiri).</li>
-        <li><span class="bold-blue">Ketentuan Sekolah:</span> Seluruh SD Negeri wajib menggunakan sistem SPMB online.</li>
-    </ul>
-</div>
+    <!-- Ghost kubus yang mengikuti kursor -->
+    <div id="dragGhost"></div>
 
+    <script>
+        const world = document.getElementById('world');
+        const scene = document.getElementById('scene');
+        const toolGrid = document.getElementById('toolGrid');
+        const dragGhost = document.getElementById('dragGhost');
+        const cubeCountEl = document.getElementById('cubeCount');
+        const btnRotate = document.getElementById('btnRotate');
+
+        const SIZE = 80;
+        let cubes = [];
+
+        let rotX = -25;
+        let rotY = 35;
+        let scale = 1;
+        let isDraggingView = false;
+        let startX = 0, startY = 0;
+        let autoRotate = false;
+
+        // State drag tool
+        let draggingColor = null;
+        let hoveredFace = null;
+
+        const COLORS = [
+            '#00a8ff', '#2ecc71', '#e67e22',
+            '#9b59b6', '#f1c40f', '#e74c3c',
+            '#1abc9c', '#e91e63', '#ffffff'
+        ];
+
+        /* ---------- Utilitas Warna ---------- */
+        function adjustColor(hex, percent) {
+            let num = parseInt(hex.replace("#", ""), 16),
+                amt = Math.round(2.55 * percent),
+                R = (num >> 16) + amt,
+                G = (num >> 8 & 0x00FF) + amt,
+                B = (num & 0x0000FF) + amt;
+            R = Math.max(0, Math.min(255, R));
+            G = Math.max(0, Math.min(255, G));
+            B = Math.max(0, Math.min(255, B));
+            return "#" + ((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1);
+        }
+
+        /* ---------- Transformasi World ---------- */
+        function applyTransform() {
+            world.style.transform =
+                `scale(${scale}) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+        }
+
+        /* ---------- Membuat Tool Kubus di Panel ---------- */
+        function buildToolGrid() {
+            toolGrid.innerHTML = '';
+            COLORS.forEach(color => {
+                const t = document.createElement('div');
+                t.className = 'tool-cube';
+                t.style.background = color;
+                t.dataset.color = color;
+                t.title = 'Tarik ke sisi kubus 3D';
+                t.addEventListener('mousedown', (e) => startToolDrag(e, color));
+                t.addEventListener('touchstart', (e) => startToolDrag(e, color), { passive: false });
+                toolGrid.appendChild(t);
+            });
+        }
+
+        /* ---------- Membuat Elemen Kubus 3D ---------- */
+        function createCubeElement(x, y, z, color) {
+            const cubeEl = document.createElement('div');
+            cubeEl.className = 'cube';
+            cubeEl.style.transform =
+                `translate3d(${x * SIZE}px, ${y * SIZE}px, ${z * SIZE}px)`;
+
+            const faces = [
+                { cls: 'front',  shade: 0,   label: 'DEPAN' },
+                { cls: 'back',   shade: -10, label: 'BELAKANG' },
+                { cls: 'right',  shade: -15, label: 'KANAN' },
+                { cls: 'left',   shade: -20, label: 'KIRI' },
+                { cls: 'top',    shade: 15,  label: 'ATAS' },
+                { cls: 'bottom', shade: -30, label: 'BAWAH' }
+            ];
+            faces.forEach(f => {
+                const faceEl = document.createElement('div');
+                faceEl.className = `face ${f.cls}`;
+                faceEl.style.backgroundColor = adjustColor(color, f.shade);
+                faceEl.textContent = f.label;
+                cubeEl.appendChild(faceEl);
+            });
+            world.appendChild(cubeEl);
+            return cubeEl;
+        }
+
+        /* ---------- Update Statistik ---------- */
+        function updateStats() {
+            cubeCountEl.textContent = cubes.length;
+        }
+
+        /* ---------- Drag Tool: Mulai ---------- */
+        function startToolDrag(e, color) {
+            e.preventDefault();
+            e.stopPropagation(); // jangan memicu drag view
+            draggingColor = color;
+
+            // Tampilkan ghost
+            dragGhost.style.display = 'block';
+            dragGhost.style.background = color;
+            document.body.classList.add('dragging-tool');
+
+            const pos = getClientPoint(e);
+            moveGhost(pos.x, pos.y);
+        }
+
+        function getClientPoint(e) {
+            if (e.touches && e.touches[0]) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        function moveGhost(x, y) {
+            dragGhost.style.left = x + 'px';
+            dragGhost.style.top = y + 'px';
+        }
+
+        /* ---------- Drag Tool: Gerak ---------- */
+        function onToolMove(e) {
+            if (!draggingColor) return;
+            const pos = getClientPoint(e);
+            moveGhost(pos.x, pos.y);
+
+            // Deteksi face di bawah kursor (abaikan ghost)
+            dragGhost.style.display = 'none';
+            const el = document.elementFromPoint(pos.x, pos.y);
+            dragGhost.style.display = 'block';
+
+            const faceEl = el ? el.closest('.face') : null;
+
+            if (hoveredFace && hoveredFace !== faceEl) {
+                hoveredFace.classList.remove('drop-hover');
+            }
+            if (faceEl && faceEl.closest('#world')) {
+                faceEl.classList.add('drop-hover');
+                hoveredFace = faceEl;
+            } else {
+                hoveredFace = null;
+            }
+        }
+
+        /* ---------- Drag Tool: Selesai (Drop) ---------- */
+        function onToolUp(e) {
+            if (!draggingColor) return;
+
+            const pos = getClientPoint(e);
+            dragGhost.style.display = 'none';
+            const el = document.elementFromPoint(pos.x, pos.y);
+
+            let faceEl = el ? el.closest('.face') : null;
+            if (hoveredFace) hoveredFace.classList.remove('drop-hover');
+
+            if (faceEl && faceEl.closest('#world')) {
+                dropOnFace(faceEl, draggingColor);
+            }
+
+            // Reset
+            hoveredFace = null;
+            draggingColor = null;
+            dragGhost.style.display = 'none';
+            document.body.classList.remove('dragging-tool');
+        }
+
+        /* ---------- Menempelkan Kubus Berdasarkan Sisi ---------- */
+        function dropOnFace(faceEl, color) {
+            const cubeEl = faceEl.closest('.cube');
+            if (!cubeEl) return;
+
+            // Cari data kubus target
+            const target = cubes.find(c => c.element === cubeEl);
+            if (!target) return;
+
+            // Arah normal berdasarkan class face
+            const dirMap = {
+                'front':  [0, 0,  1],
+                'back':   [0, 0, -1],
+                'right':  [1, 0,  0],
+                'left':   [-1, 0, 0],
+                'top':    [0, -1, 0],  // -Y = atas (karena CSS Y ke bawah)
+                'bottom': [0,  1, 0]   // +Y = bawah
+            };
+            const faceClass = ['front','back','right','left','top','bottom']
+                .find(c => faceEl.classList.contains(c));
+            if (!faceClass) return;
+
+            const [dx, dy, dz] = dirMap[faceClass];
+            const newX = target.x + dx;
+            const newY = target.y + dy;
+            const newZ = target.z + dz;
+
+            // Cek tabrakan
+            const exists = cubes.some(c => c.x === newX && c.y === newY && c.z === newZ);
+            if (exists) {
+                flashFace(faceEl, '#e74c3c');
+                return;
+            }
+
+            // Tambah kubus
+            const el = createCubeElement(newX, newY, newZ, color);
+            cubes.push({ x: newX, y: newY, z: newZ, color, element: el });
+            updateStats();
+            flashFace(faceEl, '#2ecc71');
+        }
+
+        /* Efek flash pada sisi target */
+        function flashFace(faceEl, color) {
+            const oldShadow = faceEl.style.boxShadow;
+            faceEl.style.boxShadow = `inset 0 0 25px ${color}`;
+            setTimeout(() => { faceEl.style.boxShadow = oldShadow; }, 300);
+        }
+
+        /* ---------- Hapus Kubus Terakhir ---------- */
+        function removeLastCube() {
+            if (cubes.length <= 1) {
+                alert("Minimal harus tersisa 1 kubus utama.");
+                return;
+            }
+            const removed = cubes.pop();
+            world.removeChild(removed.element);
+            updateStats();
+        }
+
+        /* ---------- Reset ---------- */
+        function resetWorld() {
+            world.innerHTML = '';
+            cubes = [];
+            const el = createCubeElement(0, 0, 0, '#00a8ff');
+            cubes.push({ x: 0, y: 0, z: 0, color: '#00a8ff', element: el });
+            updateStats();
+        }
+
+        /* ---------- Putar Otomatis ---------- */
+        function toggleAutoRotate() {
+            autoRotate = !autoRotate;
+            btnRotate.textContent = autoRotate
+                ? "Putar Otomatis: NYALA"
+                : "Putar Otomatis: MATI";
+        }
+
+        function animate() {
+            if (autoRotate) {
+                rotY += 0.5;
+                applyTransform();
+            }
+            requestAnimationFrame(animate);
+        }
+
+        /* ---------- Drag View (putar scene) ---------- */
+        function onViewDown(e) {
+            // Jika sedang drag tool, jangan putar scene
+            if (draggingColor) return;
+            if (e.target.closest('#toolbox')) return;
+            isDraggingView = true;
+            const p = getClientPoint(e);
+            startX = p.x;
+            startY = p.y;
+        }
+
+        function onViewMove(e) {
+            if (!isDraggingView) return;
+            const p = getClientPoint(e);
+            const dx = p.x - startX;
+            const dy = p.y - startY;
+            rotY += dx * 0.5;
+            rotX -= dy * 0.5;
+            rotX = Math.max(-90, Math.min(90, rotX));
+            startX = p.x;
+            startY = p.y;
+            applyTransform();
+        }
+
+        function onViewUp() { isDraggingView = false; }
+
+        /* ---------- Event Listener ---------- */
+        // Global drag tool
+        document.addEventListener('mousemove', (e) => {
+            if (draggingColor) onToolMove(e);
+            else onViewMove(e);
+        });
+        document.addEventListener('mouseup', (e) => {
+            if (draggingColor) onToolUp(e);
+            else onViewUp();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (draggingColor) { e.preventDefault(); onToolMove(e); }
+            else onViewMove(e);
+        }, { passive: false });
+        document.addEventListener('touchend', (e) => {
+            if (draggingColor) onToolUp(e);
+            else onViewUp();
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (draggingColor) return;
+            onViewDown(e);
+        });
+        document.addEventListener('touchstart', (e) => {
+            if (draggingColor) return;
+            onViewDown(e);
+        }, { passive: true });
+
+        // Zoom
+        document.addEventListener('wheel', (e) => {
+            if (e.target.closest('#toolbox')) return;
+            e.preventDefault();
+            scale += e.deltaY > 0 ? -0.08 : 0.08;
+            scale = Math.max(0.3, Math.min(3, scale));
+            applyTransform();
+        }, { passive: false });
+
+        /* ---------- Inisialisasi ---------- */
+        buildToolGrid();
+        applyTransform();
+        resetWorld();
+        animate();
+    </script>
 </body>
 </html>
