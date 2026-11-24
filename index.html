@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rakit Kubus 3D - Drag & Drop Tool</title>
+    <title>Rakit Kubus 3D - Grid Board</title>
     <style>
         body {
             margin: 0;
@@ -29,9 +29,10 @@
             font-size: 13px;
             text-align: center;
             pointer-events: none;
+            z-index: 10;
         }
 
-        /* ---------- Panel Tool ---------- */
+        /* ---------- Panel Tool (Bisa di-hide) ---------- */
         #toolbox {
             position: absolute;
             top: 15px;
@@ -41,11 +42,38 @@
             border-radius: 10px;
             color: white;
             border: 1px solid #444;
-            width: 220px;
+            width: 250px;
             z-index: 20;
             cursor: default;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: transform 0.3s ease-in-out;
         }
+        #toolbox.hidden-panel {
+            transform: translateX(-300px);
+        }
+        
+        #togglePanelBtn {
+            position: absolute;
+            top: 20px;
+            right: 5px;
+            width: 25px;
+            height: 25px;
+            background: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 21;
+            transition: transform 0.3s;
+        }
+        #toolbox.hidden-panel #togglePanelBtn {
+            transform: translateX(285px);
+        }
+
         #toolbox h3 {
             margin: 0 0 10px 0;
             font-size: 14px;
@@ -66,6 +94,7 @@
             grid-template-columns: repeat(3, 1fr);
             gap: 8px;
             margin-bottom: 12px;
+            overflow: hidden;
         }
         .tool-cube {
             aspect-ratio: 1 / 1;
@@ -82,7 +111,6 @@
         }
         .tool-cube:active { cursor: grabbing; }
 
-        /* Ghost kubus yang mengikuti kursor saat drag */
         #dragGhost {
             position: fixed;
             width: 40px;
@@ -93,11 +121,10 @@
             display: none;
             opacity: 0.85;
             border: 2px solid white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.6), inset 0 -4px 0 rgba(0,0,0,0.25);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.6);
             transform: translate(-50%, -50%);
         }
 
-        /* Highlight sisi kubus yang di-hover saat drag */
         .face.drop-hover {
             outline: 3px solid #f1c40f;
             outline-offset: -3px;
@@ -105,7 +132,11 @@
             filter: brightness(1.4);
         }
 
-        /* Panel statistik & tombol */
+        .cell.drop-hover-cell {
+            background: rgba(241, 196, 15, 0.4) !important;
+            box-shadow: inset 0 0 15px rgba(241, 196, 15, 0.8);
+        }
+
         .stats {
             margin-top: 8px;
             font-size: 13px;
@@ -125,16 +156,59 @@
             cursor: pointer;
             background: #444;
             color: white;
+            transition: background 0.2s;
         }
         .btn-action:hover { background: #555; }
         .btn-reset { background: #c0392b; }
         .btn-reset:hover { background: #e74c3c; }
+        .btn-toggle { background: #2980b9; }
+        .btn-toggle:hover { background: #3498db; }
+        .btn-toggle.active { background: #27ae60; }
+        .btn-toggle.active:hover { background: #2ecc71; }
 
-        /* Wadah 3D */
+        .arrow-section {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        .arrow-section h4 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            font-weight: normal;
+        }
+        .arrow-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            max-width: 140px;
+            margin: 0 auto;
+        }
+        .arrow-btn {
+            width: 100%;
+            aspect-ratio: 1/1;
+            border-radius: 6px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: #333;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, transform 0.1s;
+            user-select: none;
+        }
+        .arrow-btn:hover { background: #555; border-color: #33b9ff; }
+        .arrow-btn:active { transform: scale(0.92); }
+        .arrow-btn.empty { visibility: hidden; }
+
+        /* ---------- Wadah 3D & Grid Board ---------- */
         .scene {
             width: 80px;
             height: 80px;
-            perspective: 1000px;
+            perspective: 1200px;
         }
         .world {
             width: 100%;
@@ -143,11 +217,88 @@
             transform-style: preserve-3d;
             transform: rotateX(-25deg) rotateY(35deg);
         }
+        
+        .board {
+            position: absolute;
+            width: 560px;  
+            height: 560px; 
+            left: -280px;  
+            top: -280px;   
+            transform-style: preserve-3d;
+            /* Lantai datar di bawah */
+            transform: translateY(40px) rotateX(90deg);
+            background: #e0e5ec;
+            border: 2px solid #8898aa;
+            border-radius: 4px;
+            display: grid;
+            grid-template-columns: 80px repeat(6, 80px);
+            grid-template-rows: 80px repeat(6, 80px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: background 0.3s, border-color 0.3s;
+        }
+        /* Saat lantai disembunyikan: seluruh grid hilang, kubus tetap di layer terpisah */
+        .board.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #cubesLayer {
+            position: absolute;
+            left: -280px;
+            top: -280px;
+            width: 560px;
+            height: 560px;
+            transform-style: preserve-3d;
+            transform: translateY(40px) rotateX(90deg);
+            pointer-events: none; /* biar event tembus ke board/cell jika perlu */
+        }
+        #cubesLayer .cube {
+            pointer-events: auto; /* kubus sendiri tetap bisa diklik/di-hover */
+        }
+        
+        .cell {
+            border: 1px solid #b0b8c4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #8898aa;
+            position: relative;
+            background: rgba(255,255,255,0.6);
+            transition: background 0.15s;
+            /* PENTING: Cell jadi wadah 3D agar kubus menempel di atasnya */
+            transform-style: preserve-3d; 
+        }
+        .cell.label-col {
+            background: transparent;
+            border: none;
+            color: #c0392b;
+            font-size: 18px;
+            font-weight: 900;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .cell.label-row {
+            background: transparent;
+            border: none;
+            color: #2980b9;
+            font-size: 18px;
+            font-weight: 900;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        .cell.label-corner {
+            background: transparent;
+            border: none;
+        }
+
+        /* Kubus 3D */
         .cube {
             width: 80px;
             height: 80px;
             position: absolute;
             transform-style: preserve-3d;
+            transform-origin: 0 0; /* penting agar translate mengacu ke sudut kiri-atas */
+            transition: transform 0.2s ease-out;
         }
         .face {
             position: absolute;
@@ -165,45 +316,73 @@
             letter-spacing: 0.5px;
             transition: filter 0.12s, box-shadow 0.12s;
         }
-        .front  { transform: rotateY(  0deg) translateZ(40px); }
-        .back   { transform: rotateY(180deg) translateZ(40px); }
-        .right  { transform: rotateY( 90deg) translateZ(40px); }
-        .left   { transform: rotateY(-90deg) translateZ(40px); }
-        .top    { transform: rotateX( 90deg) translateZ(40px); }
-        .bottom { transform: rotateX(-90deg) translateZ(40px); }
+        /* Orientasi disesuaikan: sumbu Z lokal = arah tumpuk ke atas */
+        .top    { transform: rotateY(  0deg) translateZ(40px); }  /* +Z = ATAS (stacking) */
+        .bottom { transform: rotateY(180deg) translateZ(40px); } /* -Z = BAWAH */
+        .front  { transform: rotateX( 90deg) translateZ(40px); }  /* +Y */
+        .back   { transform: rotateX(-90deg) translateZ(40px); } /* -Y */
+        .right  { transform: rotateY( 90deg) translateZ(40px); }  /* +X */
+        .left   { transform: rotateY(-90deg) translateZ(40px); }  /* -X */
     </style>
 </head>
 <body>
-    <div id="info">Geser layar untuk memutar • Scroll untuk zoom • Tarik kubus dari panel ke sisi kubus target</div>
+    <div id="info">Geser layar untuk memutar • Scroll untuk zoom • Tarik kubus ke petak grid</div>
 
     <div id="toolbox">
+        <button id="togglePanelBtn" onclick="togglePanel()" title="Sembunyikan Panel">◀</button>
+
         <h3>🧰 Tool Kubus</h3>
-        <p class="hint">Tarik salah satu kubus ke salah satu sisi kubus di scene</p>
+        <p class="hint">Tarik salah satu kubus ke petak grid lantai</p>
+
         <div class="tool-grid" id="toolGrid"></div>
+        
+        <!-- Tombol Lantai Default: tersembunyi, jadi aksi = Tampilkan -->
+        <button class="btn-action btn-toggle" id="btnToggleFloor" onclick="toggleFloor()">🗺️ Tampilkan Lantai</button>
+
+        <div class="arrow-section">
+            <h4>Geser Kubus Terpilih</h4>
+            <div class="arrow-pad">
+                <button class="arrow-btn empty"></button>
+                <button class="arrow-btn" onclick="moveSelection('up')">▲</button>
+                <button class="arrow-btn empty"></button>
+                <button class="arrow-btn" onclick="moveSelection('left')">◀</button>
+                <button class="arrow-btn" onclick="moveSelection('down')">▼</button>
+                <button class="arrow-btn" onclick="moveSelection('right')">▶</button>
+            </div>
+        </div>
+
         <button class="btn-action" onclick="toggleAutoRotate()" id="btnRotate">Putar Otomatis: MATI</button>
         <button class="btn-action" onclick="removeLastCube()">Hapus Kubus Terakhir</button>
         <button class="btn-action btn-reset" onclick="resetWorld()">Reset ke 1 Kubus</button>
         <div class="stats">
-            Total Kubus: <strong id="cubeCount">1</strong>
+            Total Kubus: <strong id="cubeCount">0</strong>
         </div>
     </div>
 
     <div class="scene" id="scene">
-        <div class="world" id="world"></div>
+        <div class="world" id="world">
+            <div class="board" id="board"></div>
+            <!-- Layer terpisah untuk kubus, agar tetap terlihat saat lantai disembunyikan -->
+            <div id="cubesLayer"></div>
+        </div>
     </div>
 
-    <!-- Ghost kubus yang mengikuti kursor -->
     <div id="dragGhost"></div>
 
     <script>
         const world = document.getElementById('world');
-        const scene = document.getElementById('scene');
         const toolGrid = document.getElementById('toolGrid');
         const dragGhost = document.getElementById('dragGhost');
         const cubeCountEl = document.getElementById('cubeCount');
         const btnRotate = document.getElementById('btnRotate');
+        const boardEl = document.getElementById('board');
+        const toolbox = document.getElementById('toolbox');
+        const togglePanelBtn = document.getElementById('togglePanelBtn');
+        const btnToggleFloor = document.getElementById('btnToggleFloor');
 
         const SIZE = 80;
+        const GRID_COLS = 6;
+        const GRID_ROWS = 6;
         let cubes = [];
 
         let rotX = -25;
@@ -212,10 +391,14 @@
         let isDraggingView = false;
         let startX = 0, startY = 0;
         let autoRotate = false;
+        
+        // STATE AWAL: Lantai disembunyikan
+        let floorVisible = false; 
 
-        // State drag tool
         let draggingColor = null;
         let hoveredFace = null;
+        let hoveredCell = null;
+        let selectedCube = null;
 
         const COLORS = [
             '#00a8ff', '#2ecc71', '#e67e22',
@@ -223,7 +406,14 @@
             '#1abc9c', '#e91e63', '#ffffff'
         ];
 
-        /* ---------- Utilitas Warna ---------- */
+        const COL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
+        const ROW_LABELS = ['1', '2', '3', '4', '5', '6'];
+
+        function togglePanel() {
+            toolbox.classList.toggle('hidden-panel');
+            togglePanelBtn.textContent = toolbox.classList.contains('hidden-panel') ? '▶' : '◀';
+        }
+
         function adjustColor(hex, percent) {
             let num = parseInt(hex.replace("#", ""), 16),
                 amt = Math.round(2.55 * percent),
@@ -236,13 +426,43 @@
             return "#" + ((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1);
         }
 
-        /* ---------- Transformasi World ---------- */
         function applyTransform() {
-            world.style.transform =
-                `scale(${scale}) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+            world.style.transform = `scale(${scale}) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
         }
 
-        /* ---------- Membuat Tool Kubus di Panel ---------- */
+        // Kubus diletakkan di dalam cell lantai
+        function buildBoard() {
+            boardEl.innerHTML = '';
+
+            const corner = document.createElement('div');
+            corner.className = 'cell label-corner';
+            boardEl.appendChild(corner);
+
+            for (let c = 0; c < GRID_COLS; c++) {
+                const label = document.createElement('div');
+                label.className = 'cell label-col';
+                label.textContent = COL_LABELS[c];
+                boardEl.appendChild(label);
+            }
+
+            for (let r = 0; r < GRID_ROWS; r++) {
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'cell label-row';
+                rowLabel.textContent = ROW_LABELS[r];
+                boardEl.appendChild(rowLabel);
+
+                for (let c = 0; c < GRID_COLS; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.col = c;
+                    cell.dataset.row = r;
+                    cell.dataset.x = (-GRID_COLS/2 + c + 0.5) * SIZE;
+                    cell.dataset.z = (-GRID_ROWS/2 + r + 0.5) * SIZE;
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
         function buildToolGrid() {
             toolGrid.innerHTML = '';
             COLORS.forEach(color => {
@@ -250,19 +470,29 @@
                 t.className = 'tool-cube';
                 t.style.background = color;
                 t.dataset.color = color;
-                t.title = 'Tarik ke sisi kubus 3D';
                 t.addEventListener('mousedown', (e) => startToolDrag(e, color));
                 t.addEventListener('touchstart', (e) => startToolDrag(e, color), { passive: false });
                 toolGrid.appendChild(t);
             });
         }
 
-        /* ---------- Membuat Elemen Kubus 3D ---------- */
-        function createCubeElement(x, y, z, color) {
+        function createCubeElement(col, row, level, color) {
             const cubeEl = document.createElement('div');
             cubeEl.className = 'cube';
-            cubeEl.style.transform =
-                `translate3d(${x * SIZE}px, ${y * SIZE}px, ${z * SIZE}px)`;
+
+            // Posisi di layer yang sudah di-rotate sama seperti board
+            // Label row/col memakan 80px di kiri & atas.
+            // Top-left cell (col,row) = (80 + col*80, 80 + row*80)
+            // Kubus 80x80 diletakkan tepat di atas cell (origin di top-left)
+            const posX = 80 + col * SIZE;
+            const posY = 80 + row * SIZE;
+            const worldZ = 40 + (level * SIZE);
+            
+            cubeEl.style.transform = `translate3d(${posX}px, ${posY}px, ${worldZ}px)`;
+
+            cubeEl.dataset.cellCol = col;
+            cubeEl.dataset.cellRow = row;
+            cubeEl.dataset.level = level;
 
             const faces = [
                 { cls: 'front',  shade: 0,   label: 'DEPAN' },
@@ -279,34 +509,112 @@
                 faceEl.textContent = f.label;
                 cubeEl.appendChild(faceEl);
             });
-            world.appendChild(cubeEl);
+
+            cubeEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectCube(cubeEl);
+            });
+
+            document.getElementById('cubesLayer').appendChild(cubeEl);
             return cubeEl;
         }
 
-        /* ---------- Update Statistik ---------- */
-        function updateStats() {
-            cubeCountEl.textContent = cubes.length;
+        function selectCube(cubeEl) {
+            if (selectedCube) selectedCube.classList.remove('selected');
+            selectedCube = cubeEl;
+            selectedCube.classList.add('selected');
         }
 
-        /* ---------- Drag Tool: Mulai ---------- */
-        function startToolDrag(e, color) {
-            e.preventDefault();
-            e.stopPropagation(); // jangan memicu drag view
-            draggingColor = color;
+        function getCell(col, row) {
+            return boardEl.querySelector(`.cell[data-col="${col}"][data-row="${row}"]`);
+        }
 
-            // Tampilkan ghost
+        function moveSelection(direction) {
+            if (!selectedCube) {
+                if (cubes.length > 0) selectCube(cubes[0].element);
+                return;
+            }
+
+            let currentCol = parseInt(selectedCube.dataset.cellCol);
+            let currentRow = parseInt(selectedCube.dataset.cellRow);
+            let currentLevel = parseInt(selectedCube.dataset.level);
+
+            let newCol = currentCol;
+            let newRow = currentRow;
+
+            switch(direction) {
+                case 'left':  newCol -= 1; break;
+                case 'right': newCol += 1; break;
+                case 'up':    newRow -= 1; break;
+                case 'down':  newRow += 1; break;
+            }
+
+            if (newCol < 0 || newCol >= GRID_COLS || newRow < 0 || newRow >= GRID_ROWS) return;
+
+            const targetCell = getCell(newCol, newRow);
+            if (!targetCell) return;
+
+            const collisionSameLevel = cubes.some(c =>
+                c.element !== selectedCube &&
+                c.col === newCol && c.row === newRow && c.level === currentLevel
+            );
+
+            let targetLevel = 0;
+            if (collisionSameLevel) {
+                const aboveCollision = cubes.some(c =>
+                    c.element !== selectedCube &&
+                    c.col === newCol && c.row === newRow && c.level === currentLevel + 1
+                );
+                if (!aboveCollision) {
+                    targetLevel = currentLevel + 1;
+                } else {
+                    return;
+                }
+            } else {
+                const cubesAtPos = cubes.filter(c => c.element !== selectedCube && c.col === newCol && c.row === newRow);
+                if (cubesAtPos.length > 0) {
+                    targetLevel = Math.max(...cubesAtPos.map(c => c.level)) + 1;
+                }
+            }
+
+            const posX = 80 + newCol * SIZE;
+            const posY = 80 + newRow * SIZE;
+            const worldZ = 40 + (targetLevel * SIZE);
+            selectedCube.style.transform = `translate3d(${posX}px, ${posY}px, ${worldZ}px)`;
+            
+            selectedCube.dataset.cellCol = newCol;
+            selectedCube.dataset.cellRow = newRow;
+            selectedCube.dataset.level = targetLevel;
+
+            const cubeData = cubes.find(c => c.element === selectedCube);
+            if (cubeData) {
+                cubeData.col = newCol;
+                cubeData.row = newRow;
+                cubeData.level = targetLevel;
+            }
+        }
+
+        function updateStats() { cubeCountEl.textContent = cubes.length; }
+
+        function toggleFloor() {
+            floorVisible = !floorVisible;
+            boardEl.classList.toggle('hidden', !floorVisible);
+            // Teks tombol menunjukkan aksi yang akan dilakukan
+            btnToggleFloor.textContent = floorVisible ? '🗺️ Sembunyikan Lantai' : '🗺️ Tampilkan Lantai';
+            btnToggleFloor.classList.toggle('active', floorVisible);
+        }
+
+        function startToolDrag(e, color) {
+            e.preventDefault(); e.stopPropagation();
+            draggingColor = color;
             dragGhost.style.display = 'block';
             dragGhost.style.background = color;
             document.body.classList.add('dragging-tool');
-
-            const pos = getClientPoint(e);
-            moveGhost(pos.x, pos.y);
+            moveGhost(getClientPoint(e).x, getClientPoint(e).y);
         }
 
         function getClientPoint(e) {
-            if (e.touches && e.touches[0]) {
-                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
+            if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
             return { x: e.clientX, y: e.clientY };
         }
 
@@ -315,192 +623,172 @@
             dragGhost.style.top = y + 'px';
         }
 
-        /* ---------- Drag Tool: Gerak ---------- */
         function onToolMove(e) {
             if (!draggingColor) return;
             const pos = getClientPoint(e);
             moveGhost(pos.x, pos.y);
 
-            // Deteksi face di bawah kursor (abaikan ghost)
             dragGhost.style.display = 'none';
             const el = document.elementFromPoint(pos.x, pos.y);
             dragGhost.style.display = 'block';
 
             const faceEl = el ? el.closest('.face') : null;
+            const cellEl = el ? el.closest('.cell') : null;
+            const isDataCell = cellEl && cellEl.dataset.col !== undefined;
 
-            if (hoveredFace && hoveredFace !== faceEl) {
-                hoveredFace.classList.remove('drop-hover');
-            }
-            if (faceEl && faceEl.closest('#world')) {
+            if (hoveredFace && hoveredFace !== faceEl) { hoveredFace.classList.remove('drop-hover'); hoveredFace = null; }
+            if (hoveredCell && hoveredCell !== cellEl) { hoveredCell.classList.remove('drop-hover-cell'); hoveredCell = null; }
+
+            if (faceEl && faceEl.closest('.cube')) {
                 faceEl.classList.add('drop-hover');
                 hoveredFace = faceEl;
-            } else {
-                hoveredFace = null;
+            } else if (isDataCell) {
+                cellEl.classList.add('drop-hover-cell');
+                hoveredCell = cellEl;
             }
         }
 
-        /* ---------- Drag Tool: Selesai (Drop) ---------- */
         function onToolUp(e) {
             if (!draggingColor) return;
-
             const pos = getClientPoint(e);
             dragGhost.style.display = 'none';
             const el = document.elementFromPoint(pos.x, pos.y);
 
             let faceEl = el ? el.closest('.face') : null;
-            if (hoveredFace) hoveredFace.classList.remove('drop-hover');
+            let cellEl = el ? el.closest('.cell') : null;
+            const isDataCell = cellEl && cellEl.dataset.col !== undefined;
 
-            if (faceEl && faceEl.closest('#world')) {
-                dropOnFace(faceEl, draggingColor);
+            if (hoveredFace) hoveredFace.classList.remove('drop-hover');
+            if (hoveredCell) hoveredCell.classList.remove('drop-hover-cell');
+
+            if (faceEl && faceEl.closest('.cube')) {
+                const cubeEl = faceEl.closest('.cube');
+                if (cubeEl) dropOnCube(cubeEl, faceEl, draggingColor);
+            } else if (isDataCell) {
+                dropOnGrid(cellEl, draggingColor);
             }
 
-            // Reset
-            hoveredFace = null;
-            draggingColor = null;
+            hoveredFace = null; hoveredCell = null; draggingColor = null;
             dragGhost.style.display = 'none';
             document.body.classList.remove('dragging-tool');
         }
 
-        /* ---------- Menempelkan Kubus Berdasarkan Sisi ---------- */
-        function dropOnFace(faceEl, color) {
-            const cubeEl = faceEl.closest('.cube');
-            if (!cubeEl) return;
+        function dropOnCube(targetCubeEl, faceEl, color) {
+            const targetCol = parseInt(targetCubeEl.dataset.cellCol);
+            const targetRow = parseInt(targetCubeEl.dataset.cellRow);
+            const targetLevel = parseInt(targetCubeEl.dataset.level);
 
-            // Cari data kubus target
-            const target = cubes.find(c => c.element === cubeEl);
-            if (!target) return;
-
-            // Arah normal berdasarkan class face
-            const dirMap = {
-                'front':  [0, 0,  1],
-                'back':   [0, 0, -1],
-                'right':  [1, 0,  0],
-                'left':   [-1, 0, 0],
-                'top':    [0, -1, 0],  // -Y = atas (karena CSS Y ke bawah)
-                'bottom': [0,  1, 0]   // +Y = bawah
-            };
-            const faceClass = ['front','back','right','left','top','bottom']
-                .find(c => faceEl.classList.contains(c));
+            const faceClass = ['front','back','right','left','top','bottom'].find(c => faceEl.classList.contains(c));
             if (!faceClass) return;
 
-            const [dx, dy, dz] = dirMap[faceClass];
-            const newX = target.x + dx;
-            const newY = target.y + dy;
-            const newZ = target.z + dz;
+            let newCol = targetCol;
+            let newRow = targetRow;
+            let newLevel = targetLevel;
 
-            // Cek tabrakan
-            const exists = cubes.some(c => c.x === newX && c.y === newY && c.z === newZ);
-            if (exists) {
-                flashFace(faceEl, '#e74c3c');
-                return;
+            // Mapping sesuai orientasi baru: top/bottom = sumbu Z (tinggi), front/back = sumbu Y (baris), left/right = sumbu X (kolom)
+            if (faceClass === 'top') newLevel += 1;
+            else if (faceClass === 'bottom') newLevel -= 1;
+            else if (faceClass === 'front') newRow += 1; 
+            else if (faceClass === 'back') newRow -= 1;
+            else if (faceClass === 'right') newCol += 1;
+            else if (faceClass === 'left') newCol -= 1;
+
+            if (newLevel < 0 || newCol < 0 || newCol >= GRID_COLS || newRow < 0 || newRow >= GRID_ROWS) {
+                flashFace(faceEl, '#e74c3c'); return;
             }
 
-            // Tambah kubus
-            const el = createCubeElement(newX, newY, newZ, color);
-            cubes.push({ x: newX, y: newY, z: newZ, color, element: el });
-            updateStats();
-            flashFace(faceEl, '#2ecc71');
+            const targetCell = getCell(newCol, newRow);
+            if (!targetCell) return;
+
+            if (cubes.some(c => c.col === newCol && c.row === newRow && c.level === newLevel)) {
+                flashFace(faceEl, '#e74c3c'); return;
+            }
+
+            const el = createCubeElement(newCol, newRow, newLevel, color);
+            cubes.push({ col: newCol, row: newRow, level: newLevel, color, element: el });
+            updateStats(); flashFace(faceEl, '#2ecc71'); selectCube(el);
         }
 
-        /* Efek flash pada sisi target */
+        function dropOnGrid(cellEl, color) {
+            const col = parseInt(cellEl.dataset.col);
+            const row = parseInt(cellEl.dataset.row);
+
+            let targetLevel = 0;
+            const cubesAtPos = cubes.filter(c => c.col === col && c.row === row);
+            if (cubesAtPos.length > 0) targetLevel = Math.max(...cubesAtPos.map(c => c.level)) + 1;
+
+            const el = createCubeElement(col, row, targetLevel, color);
+            cubes.push({ col, row, level: targetLevel, color, element: el });
+            updateStats();
+
+            const oldBg = cellEl.style.background;
+            cellEl.style.background = 'rgba(46, 204, 113, 0.5)';
+            setTimeout(() => { cellEl.style.background = oldBg; }, 300);
+            selectCube(el);
+        }
+
         function flashFace(faceEl, color) {
             const oldShadow = faceEl.style.boxShadow;
             faceEl.style.boxShadow = `inset 0 0 25px ${color}`;
             setTimeout(() => { faceEl.style.boxShadow = oldShadow; }, 300);
         }
 
-        /* ---------- Hapus Kubus Terakhir ---------- */
         function removeLastCube() {
-            if (cubes.length <= 1) {
-                alert("Minimal harus tersisa 1 kubus utama.");
-                return;
-            }
+            if (cubes.length === 0) return;
             const removed = cubes.pop();
-            world.removeChild(removed.element);
+            removed.element.parentNode.removeChild(removed.element);
+            if (selectedCube === removed.element) selectedCube = null;
             updateStats();
         }
 
-        /* ---------- Reset ---------- */
+        // Fungsi Reset: 
+        // Hanya dipanggil saat tombol "Reset ke 1 Kubus" diklik
         function resetWorld() {
-            world.innerHTML = '';
-            cubes = [];
-            const el = createCubeElement(0, 0, 0, '#00a8ff');
-            cubes.push({ x: 0, y: 0, z: 0, color: '#00a8ff', element: el });
-            updateStats();
+            cubes.forEach(c => { if (c.element && c.element.parentNode) c.element.parentNode.removeChild(c.element); });
+            cubes = []; selectedCube = null;
+
+            const startCol = 2;
+            const startRow = 2;
+            const el = createCubeElement(startCol, startRow, 0, '#00a8ff');
+            cubes.push({ col: startCol, row: startRow, level: 0, color: '#00a8ff', element: el });
+            updateStats(); selectCube(el);
         }
 
-        /* ---------- Putar Otomatis ---------- */
         function toggleAutoRotate() {
             autoRotate = !autoRotate;
-            btnRotate.textContent = autoRotate
-                ? "Putar Otomatis: NYALA"
-                : "Putar Otomatis: MATI";
+            btnRotate.textContent = autoRotate ? "Putar Otomatis: NYALA" : "Putar Otomatis: MATI";
         }
 
         function animate() {
-            if (autoRotate) {
-                rotY += 0.5;
-                applyTransform();
-            }
+            if (autoRotate) { rotY += 0.5; applyTransform(); }
             requestAnimationFrame(animate);
         }
 
-        /* ---------- Drag View (putar scene) ---------- */
         function onViewDown(e) {
-            // Jika sedang drag tool, jangan putar scene
             if (draggingColor) return;
             if (e.target.closest('#toolbox')) return;
             isDraggingView = true;
-            const p = getClientPoint(e);
-            startX = p.x;
-            startY = p.y;
+            const p = getClientPoint(e); startX = p.x; startY = p.y;
         }
 
         function onViewMove(e) {
             if (!isDraggingView) return;
             const p = getClientPoint(e);
-            const dx = p.x - startX;
-            const dy = p.y - startY;
-            rotY += dx * 0.5;
-            rotX -= dy * 0.5;
+            rotY += (p.x - startX) * 0.5;
+            rotX -= (p.y - startY) * 0.5;
             rotX = Math.max(-90, Math.min(90, rotX));
-            startX = p.x;
-            startY = p.y;
+            startX = p.x; startY = p.y;
             applyTransform();
         }
 
         function onViewUp() { isDraggingView = false; }
 
-        /* ---------- Event Listener ---------- */
-        // Global drag tool
-        document.addEventListener('mousemove', (e) => {
-            if (draggingColor) onToolMove(e);
-            else onViewMove(e);
-        });
-        document.addEventListener('mouseup', (e) => {
-            if (draggingColor) onToolUp(e);
-            else onViewUp();
-        });
-
-        document.addEventListener('touchmove', (e) => {
-            if (draggingColor) { e.preventDefault(); onToolMove(e); }
-            else onViewMove(e);
-        }, { passive: false });
-        document.addEventListener('touchend', (e) => {
-            if (draggingColor) onToolUp(e);
-            else onViewUp();
-        });
-
-        document.addEventListener('mousedown', (e) => {
-            if (draggingColor) return;
-            onViewDown(e);
-        });
-        document.addEventListener('touchstart', (e) => {
-            if (draggingColor) return;
-            onViewDown(e);
-        }, { passive: true });
-
-        // Zoom
+        document.addEventListener('mousemove', (e) => { if (draggingColor) onToolMove(e); else onViewMove(e); });
+        document.addEventListener('mouseup', (e) => { if (draggingColor) onToolUp(e); else onViewUp(); });
+        document.addEventListener('touchmove', (e) => { if (draggingColor) { e.preventDefault(); onToolMove(e); } else onViewMove(e); }, { passive: false });
+        document.addEventListener('touchend', (e) => { if (draggingColor) onToolUp(e); else onViewUp(); });
+        document.addEventListener('mousedown', (e) => { if (!draggingColor) onViewDown(e); });
+        document.addEventListener('touchstart', (e) => { if (!draggingColor) onViewDown(e); }, { passive: true });
         document.addEventListener('wheel', (e) => {
             if (e.target.closest('#toolbox')) return;
             e.preventDefault();
@@ -509,10 +797,15 @@
             applyTransform();
         }, { passive: false });
 
-        /* ---------- Inisialisasi ---------- */
+        /* ---------- INISIALISASI (KONDISI AWAL KOSONG) ---------- */
+        buildBoard();
         buildToolGrid();
         applyTransform();
-        resetWorld();
+        
+        // Set lantai menjadi tersembunyi di awal
+        boardEl.classList.add('hidden'); 
+        updateStats();
+        
         animate();
     </script>
 </body>
